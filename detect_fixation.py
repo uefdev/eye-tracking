@@ -2,10 +2,8 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-import zipfile
-
-# Eye Tracking Project
-# Group 8 - s8, s18, s28, s4, s14, s24
+from argparse import ArgumentParser
+from zipfile import ZipFile
 
 """
 PSEUDOCODE
@@ -37,24 +35,25 @@ def zip_coords(coordinate_vector):
     return list(zip(coordinate_vector[0::2], coordinate_vector[1::2]))
 
 
-coord_data = list(map(
-    lambda row: [row[0], row[1], zip_coords(row[2:])],
-    filter(
-        lambda x: len(x) > 1,
-        map(
-            lambda row: [
-                str(value) if index == 0 or index == 1 else float(value) for index, value in enumerate(row)
-            ],
-            filter(
-                lambda row: row[0] in ["s8", "s18", "s28", "s4", "s14", "s24"],
-                map(
-                    lambda row: row.split(","),
-                    zipfile.ZipFile("train.csv.zip", "r").read("train.csv").decode("utf-8").split("\n")
+def get_filtered_data(archive_name, file_name, target_users):
+    return list(map(
+        lambda row: [row[0], row[1], zip_coords(row[2:])],
+        filter(
+            lambda row: len(row) > 1,
+            map(
+                lambda row: [
+                    str(value) if index == 0 or index == 1 else float(value) for index, value in enumerate(row)
+                ],
+                filter(
+                    lambda row: row[0] in target_users,
+                    map(
+                        lambda row: row.split(","),
+                        ZipFile(archive_name, "r").read(file_name).decode("utf-8").split("\n")
+                    )
                 )
             )
         )
-    )
-))
+    ))
 
 
 def calculate_dispersion(points):
@@ -145,14 +144,86 @@ def calculate_saccade_amplitudes(points, fixation_points):
     return saccade_amplitudes
 
 
-sample = coord_data[50]
+def main():
+    parser = ArgumentParser(
+        description="Fixation detection script"
+    )
+    parser.add_argument(
+        "--archive",
+        help="ZIP archive filename",
+        type=str,
+        dest="archive_name",
+        default="train.csv.zip"
+    )
+    parser.add_argument(
+        "--filename",
+        help="Filename inside the ZIP archive",
+        type=str,
+        dest="file_name",
+        default="train.csv"
+    )
+    parser.add_argument(
+        "--target-users",
+        help="List of target user ids",
+        type=str,
+        dest="target_users",
+        nargs="+",
+        default=["s8", "s18", "s28", "s4", "s14", "s24"]
+    )
+    parser.add_argument(
+        "--dispersion-threshold",
+        help="Dispersion threshold",
+        type=int,
+        dest="dispersion_threshold",
+        default=80
+    )
+    parser.add_argument(
+        "--duration-threshold",
+        help="Duration threshold",
+        type=int,
+        dest="duration_threshold",
+        default=100
+    )
+    args = parser.parse_args()
 
-fixation_points = detect_fixation(sample[2], 80, 100)
-saccade_amplitudes = calculate_saccade_amplitudes(sample[2], fixation_points)
+    samples = get_filtered_data(
+        archive_name=args.archive_name,
+        file_name=args.file_name,
+        target_users=args.target_users
+    )
 
-plot_fixation = np.concatenate(np.array(fixation_points)[:, 1]).reshape(-1, 2)
+    found_fixation_points = list(map(
+        lambda sample: detect_fixation(
+            original_points=sample[2],
+            dispersion_threshold=args.dispersion_threshold,
+            duration_threshold=args.duration_threshold
+        ),
+        samples
+    ))
 
-sample_array = np.array(sample[2])
-plt.scatter(sample_array[:, 0], sample_array[:, 1])
-plt.scatter(plot_fixation[:, 0], plot_fixation[:, 1])
-plt.show()
+    samples_with_fixation_points = list(zip(samples, found_fixation_points))
+
+    found_saccade_amplitudes = list(map(
+        lambda sample_pair: calculate_saccade_amplitudes(
+            points=sample_pair[0][2],
+            fixation_points=sample_pair[1]
+        ),
+        samples_with_fixation_points
+    ))
+
+    number_of_samples = len(samples_with_fixation_points)
+    print(f"{number_of_samples} samples in total (press CTRL^C to exit)")
+
+    for index, sample_fixation_pair in enumerate(samples_with_fixation_points):
+        (sample, sample_fixation_points) = sample_fixation_pair
+        print(f"Sample ({index + 1}/{number_of_samples})")
+
+        plot_fixation = np.concatenate(np.array(sample_fixation_points)[:, 1]).reshape(-1, 2)
+        sample_array = np.array(sample[2])
+        plt.scatter(sample_array[:, 0], sample_array[:, 1])
+        plt.scatter(plot_fixation[:, 0], plot_fixation[:, 1])
+        plt.show()
+
+
+if __name__ == "__main__":
+    main()
