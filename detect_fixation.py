@@ -3,6 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from argparse import ArgumentParser
+from functools import reduce
 from zipfile import ZipFile
 
 """
@@ -30,22 +31,44 @@ While points left:
 Return list of fixations
 """
 
+# Constants
+KNOWN = "known"
+UNKNOWN = "unknown"
+
 
 def zip_coords(coordinate_vector):
     return list(zip(coordinate_vector[0::2], coordinate_vector[1::2]))
 
 
-def get_filtered_data(archive_name, file_name, target_users):
-    return list(map(
-        lambda row: [row[0], row[1], zip_coords(row[2:])],
-        filter(
-            lambda row: len(row) > 1,
+def get_filtered_data_as_dict(archive_name, file_name, target_users, dispersion_threshold, duration_threshold):
+    def data_reducer(acc, cur):
+        cur_fixation_points = detect_fixation(
+            original_points=cur[2],
+            dispersion_threshold=dispersion_threshold,
+            duration_threshold=duration_threshold
+        )
+        cur_saccade_amplitudes = calculate_saccade_amplitudes(
+            points=cur[2],
+            fixation_points=cur_fixation_points
+        )
+        sample_values = (
+            cur[2],
+            cur_fixation_points,
+            cur_saccade_amplitudes
+        )
+        acc[cur[0]][KNOWN].append(sample_values) if cur[1] == "true" else acc[cur[0]][UNKNOWN].append(sample_values)
+        return acc
+
+    return reduce(
+        data_reducer,
+        list(map(
+            lambda row: [row[0], row[1], zip_coords(row[2:])],
             map(
                 lambda row: [
                     str(value) if index == 0 or index == 1 else float(value) for index, value in enumerate(row)
                 ],
                 filter(
-                    lambda row: row[0] in target_users,
+                    lambda row: row[0] in target_users and len(row) > 1,
                     map(
                         lambda row: row.split(","),
                         ZipFile(archive_name, "r").read(file_name).decode("utf-8").split("\n")
@@ -53,7 +76,9 @@ def get_filtered_data(archive_name, file_name, target_users):
                 )
             )
         )
-    ))
+        ),
+        dict({user_id: dict({KNOWN: [], UNKNOWN: []}) for user_id in target_users})
+    )
 
 
 def calculate_dispersion(points):
@@ -144,6 +169,15 @@ def calculate_saccade_amplitudes(points, fixation_points):
     return saccade_amplitudes
 
 
+def plot_sample(sample):
+    (sample_points, sample_fixation_points, sample_saccade_points) = sample
+    sample_fixation_points_array = np.concatenate(np.array(sample_fixation_points)[:, 1]).reshape(-1, 2)
+    sample_points_array = np.array(sample_points)
+    plt.scatter(sample_points_array[:, 0], sample_points_array[:, 1])
+    plt.scatter(sample_fixation_points_array[:, 0], sample_fixation_points_array[:, 1])
+    plt.show()
+
+
 def main():
     parser = ArgumentParser(
         description="Fixation detection script"
@@ -186,43 +220,28 @@ def main():
     )
     args = parser.parse_args()
 
-    samples = get_filtered_data(
+    samples = get_filtered_data_as_dict(
         archive_name=args.archive_name,
         file_name=args.file_name,
-        target_users=args.target_users
+        target_users=args.target_users,
+        dispersion_threshold=args.dispersion_threshold,
+        duration_threshold=args.duration_threshold
     )
 
-    found_fixation_points = list(map(
-        lambda sample: detect_fixation(
-            original_points=sample[2],
-            dispersion_threshold=args.dispersion_threshold,
-            duration_threshold=args.duration_threshold
-        ),
-        samples
-    ))
+    for user_id in samples:
+        print(f"\nUser {user_id}")
 
-    samples_with_fixation_points = list(zip(samples, found_fixation_points))
+        recognized_samples = len(samples[user_id][KNOWN])
+        unrecognized_samples = len(samples[user_id][UNKNOWN])
+        print(f"{recognized_samples} recognized images and {unrecognized_samples} unrecognized images")
 
-    found_saccade_amplitudes = list(map(
-        lambda sample_pair: calculate_saccade_amplitudes(
-            points=sample_pair[0][2],
-            fixation_points=sample_pair[1]
-        ),
-        samples_with_fixation_points
-    ))
+        for index, sample in enumerate(samples[user_id][KNOWN]):
+            print(f"Recognized sample {index + 1}/{recognized_samples}")
+            plot_sample(sample)
 
-    number_of_samples = len(samples_with_fixation_points)
-    print(f"{number_of_samples} samples in total (press CTRL^C to exit)")
-
-    for index, sample_fixation_pair in enumerate(samples_with_fixation_points):
-        (sample, sample_fixation_points) = sample_fixation_pair
-        print(f"Sample ({index + 1}/{number_of_samples})")
-
-        plot_fixation = np.concatenate(np.array(sample_fixation_points)[:, 1]).reshape(-1, 2)
-        sample_array = np.array(sample[2])
-        plt.scatter(sample_array[:, 0], sample_array[:, 1])
-        plt.scatter(plot_fixation[:, 0], plot_fixation[:, 1])
-        plt.show()
+        for index, sample in enumerate(samples[user_id][UNKNOWN]):
+            print(f"Unrecognized sample {index + 1}/{unrecognized_samples}")
+            plot_sample(sample)
 
 
 if __name__ == "__main__":
