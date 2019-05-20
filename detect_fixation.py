@@ -75,8 +75,7 @@ def get_filtered_data_as_dict(archive_name, file_name, target_users, dispersion_
                     )
                 )
             )
-        )
-        ),
+        )),
         dict({user_id: dict({KNOWN: [], UNKNOWN: []}) for user_id in target_users})
     )
 
