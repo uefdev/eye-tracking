@@ -35,6 +35,7 @@ Return list of fixations
 # Constants
 KNOWN = "known"
 UNKNOWN = "unknown"
+DEFAULT_TARGET_USERS = ["s8", "s18", "s28", "s4", "s14", "s24"]
 
 MFD_TRUE = "MFD_true"
 MFD_SD_TRUE = "MFD_SD_true"
@@ -75,6 +76,39 @@ def calculate_msa_sd(structs):
     return np.std(reduce(lambda acc, cur: acc + cur[2], structs, []))
 
 
+def calculate_metadata(data_dictionary):
+    for user_id in data_dictionary:
+        # MFD
+        data_dictionary[user_id][MFD_TRUE] = calculate_mfd(data_dictionary[user_id][KNOWN])
+        data_dictionary[user_id][MFD_SD_TRUE] = calculate_mfd_sd(data_dictionary[user_id][KNOWN])
+
+        data_dictionary[user_id][MFD_FALSE] = calculate_mfd(data_dictionary[user_id][UNKNOWN])
+        data_dictionary[user_id][MFD_SD_FALSE] = calculate_mfd_sd(data_dictionary[user_id][UNKNOWN])
+
+        data_dictionary[user_id][MFD_OVERALL] = calculate_mfd(
+            data_dictionary[user_id][KNOWN] + data_dictionary[user_id][UNKNOWN]
+        )
+        data_dictionary[user_id][MFD_OVERALL_SD] = calculate_mfd_sd(
+            data_dictionary[user_id][KNOWN] + data_dictionary[user_id][UNKNOWN]
+        )
+
+        # MSA
+        data_dictionary[user_id][MSA_TRUE] = calculate_msa(data_dictionary[user_id][KNOWN])
+        data_dictionary[user_id][MSA_SD_TRUE] = calculate_msa_sd(data_dictionary[user_id][KNOWN])
+
+        data_dictionary[user_id][MSA_FALSE] = calculate_msa(data_dictionary[user_id][UNKNOWN])
+        data_dictionary[user_id][MSA_SD_FALSE] = calculate_msa_sd(data_dictionary[user_id][UNKNOWN])
+
+        data_dictionary[user_id][MSA_OVERALL] = calculate_msa(
+            data_dictionary[user_id][KNOWN] + data_dictionary[user_id][UNKNOWN]
+        )
+        data_dictionary[user_id][MSA_OVERALL_SD] = calculate_msa_sd(
+            data_dictionary[user_id][KNOWN] + data_dictionary[user_id][UNKNOWN]
+        )
+
+    return data_dictionary
+
+
 def get_filtered_data_as_dict(archive_name, file_name, target_users, dispersion_threshold, duration_threshold):
     def data_reducer(acc, cur):
         cur_fixation_points = detect_fixation(
@@ -94,7 +128,7 @@ def get_filtered_data_as_dict(archive_name, file_name, target_users, dispersion_
         acc[cur[0]][KNOWN].append(sample_values) if cur[1] == "true" else acc[cur[0]][UNKNOWN].append(sample_values)
         return acc
 
-    data = reduce(
+    return calculate_metadata(reduce(
         data_reducer,
         list(map(
             lambda row: [row[0], row[1], zip_coords(row[2:])],
@@ -129,41 +163,7 @@ def get_filtered_data_as_dict(archive_name, file_name, target_users, dispersion_
                 UNKNOWN: []
             }) for user_id in target_users
         })
-    )
-
-    def calculate_metadata(data_dictionary):
-        for user_id in data_dictionary:
-            # MFD
-            data_dictionary[user_id][MFD_TRUE] = calculate_mfd(data_dictionary[user_id][KNOWN])
-            data_dictionary[user_id][MFD_SD_TRUE] = calculate_mfd_sd(data_dictionary[user_id][KNOWN])
-
-            data_dictionary[user_id][MFD_FALSE] = calculate_mfd(data_dictionary[user_id][UNKNOWN])
-            data_dictionary[user_id][MFD_SD_FALSE] = calculate_mfd_sd(data_dictionary[user_id][UNKNOWN])
-
-            data_dictionary[user_id][MFD_OVERALL] = calculate_mfd(
-                data_dictionary[user_id][KNOWN] + data_dictionary[user_id][UNKNOWN]
-            )
-            data_dictionary[user_id][MFD_OVERALL_SD] = calculate_mfd_sd(
-                data_dictionary[user_id][KNOWN] + data_dictionary[user_id][UNKNOWN]
-            )
-
-            # MSA
-            data_dictionary[user_id][MSA_TRUE] = calculate_msa(data_dictionary[user_id][KNOWN])
-            data_dictionary[user_id][MSA_SD_TRUE] = calculate_msa_sd(data_dictionary[user_id][KNOWN])
-
-            data_dictionary[user_id][MSA_FALSE] = calculate_msa(data_dictionary[user_id][UNKNOWN])
-            data_dictionary[user_id][MSA_SD_FALSE] = calculate_msa_sd(data_dictionary[user_id][UNKNOWN])
-
-            data_dictionary[user_id][MSA_OVERALL] = calculate_msa(
-                data_dictionary[user_id][KNOWN] + data_dictionary[user_id][UNKNOWN]
-            )
-            data_dictionary[user_id][MSA_OVERALL_SD] = calculate_msa_sd(
-                data_dictionary[user_id][KNOWN] + data_dictionary[user_id][UNKNOWN]
-            )
-
-        return data_dictionary
-
-    return calculate_metadata(data)
+    ))
 
 
 def calculate_dispersion(points):
@@ -303,10 +303,6 @@ def write_output_csv(output_csv_filename, data_dictionary):
         csv_file.close()
 
 
-# subject_id MFD_true MFD_SD_true MFD_false MFD_SD_false MSA_true MSA_SD_true MSA_false MSA_SD_false
-# MFD_overall MFD_overall_SD MSA_overall MSA_overall_SD
-
-
 def main():
     parser = ArgumentParser(
         description="Fixation detection script"
@@ -338,7 +334,7 @@ def main():
         type=str,
         dest="target_users",
         nargs="+",
-        default=["s8", "s18", "s28", "s4", "s14", "s24"]
+        default=DEFAULT_TARGET_USERS
     )
     parser.add_argument(
         "--dispersion-threshold",
