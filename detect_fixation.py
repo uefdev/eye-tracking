@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
-import numpy as np
+import csv
 import matplotlib.pyplot as plt
+import numpy as np
 from argparse import ArgumentParser
 from functools import reduce
 from zipfile import ZipFile
@@ -35,9 +36,43 @@ Return list of fixations
 KNOWN = "known"
 UNKNOWN = "unknown"
 
+MFD_TRUE = "MFD_true",
+MFD_SD_TRUE = "MFD_SD_true"
+
+MFD_FALSE = "MFD_false"
+MFD_SD_FALSE = "MFD_SD_false"
+
+MFD_OVERALL = "MFD_overall"
+MFD_OVERALL_SD = "MFD_overall_SD"
+
+MSA_TRUE = "MSA_true"
+MSA_SD_TRUE = "MSA_SD_true"
+
+MSA_FALSE = "MSA_false"
+MSA_SD_FALSE = "MSA_SD_false"
+
+MSA_OVERALL = "MSA_overall"
+MSA_OVERALL_SD = "MSA_overall_SD"
+
 
 def zip_coords(coordinate_vector):
     return list(zip(coordinate_vector[0::2], coordinate_vector[1::2]))
+
+
+def calculate_mfd(structs):
+    return np.mean((list(map(lambda struct: struct[0], reduce(lambda acc, cur: acc + cur[1], structs, [])))))
+
+
+def calculate_mfd_sd(structs):
+    return np.std((list(map(lambda struct: struct[0], reduce(lambda acc, cur: acc + cur[1], structs, [])))))
+
+
+def calculate_msa(structs):
+    return np.mean(reduce(lambda acc, cur: acc + cur[2], structs, []))
+
+
+def calculate_msa_sd(structs):
+    return np.std(reduce(lambda acc, cur: acc + cur[2], structs, []))
 
 
 def get_filtered_data_as_dict(archive_name, file_name, target_users, dispersion_threshold, duration_threshold):
@@ -59,7 +94,7 @@ def get_filtered_data_as_dict(archive_name, file_name, target_users, dispersion_
         acc[cur[0]][KNOWN].append(sample_values) if cur[1] == "true" else acc[cur[0]][UNKNOWN].append(sample_values)
         return acc
 
-    return reduce(
+    data = reduce(
         data_reducer,
         list(map(
             lambda row: [row[0], row[1], zip_coords(row[2:])],
@@ -76,8 +111,59 @@ def get_filtered_data_as_dict(archive_name, file_name, target_users, dispersion_
                 )
             )
         )),
-        dict({user_id: dict({KNOWN: [], UNKNOWN: []}) for user_id in target_users})
+        dict({
+            user_id: dict({
+                MFD_TRUE: None,
+                MFD_SD_TRUE: None,
+                MFD_FALSE: None,
+                MFD_SD_FALSE: None,
+                MFD_OVERALL: None,
+                MFD_OVERALL_SD: None,
+                MSA_TRUE: None,
+                MSA_SD_TRUE: None,
+                MSA_FALSE: None,
+                MSA_SD_FALSE: None,
+                MSA_OVERALL: None,
+                MSA_OVERALL_SD: None,
+                KNOWN: [],
+                UNKNOWN: []
+            }) for user_id in target_users
+        })
     )
+
+    def calculate_metadata(data_dictionary):
+        for user_id in data_dictionary:
+            # MFD
+            data_dictionary[user_id][MFD_TRUE] = calculate_mfd(data_dictionary[user_id][KNOWN])
+            data_dictionary[user_id][MFD_SD_TRUE] = calculate_mfd_sd(data_dictionary[user_id][KNOWN])
+
+            data_dictionary[user_id][MFD_FALSE] = calculate_mfd(data_dictionary[user_id][UNKNOWN])
+            data_dictionary[user_id][MFD_SD_FALSE] = calculate_mfd_sd(data_dictionary[user_id][UNKNOWN])
+
+            data_dictionary[user_id][MFD_OVERALL] = calculate_mfd(
+                data_dictionary[user_id][KNOWN] + data_dictionary[user_id][UNKNOWN]
+            )
+            data_dictionary[user_id][MFD_OVERALL_SD] = calculate_mfd_sd(
+                data_dictionary[user_id][KNOWN] + data_dictionary[user_id][UNKNOWN]
+            )
+
+            # MSA
+            data_dictionary[user_id][MSA_TRUE] = calculate_msa(data_dictionary[user_id][KNOWN])
+            data_dictionary[user_id][MSA_SD_TRUE] = calculate_msa_sd(data_dictionary[user_id][KNOWN])
+
+            data_dictionary[user_id][MSA_FALSE] = calculate_msa(data_dictionary[user_id][UNKNOWN])
+            data_dictionary[user_id][MSA_SD_FALSE] = calculate_msa_sd(data_dictionary[user_id][UNKNOWN])
+
+            data_dictionary[user_id][MSA_OVERALL] = calculate_msa(
+                data_dictionary[user_id][KNOWN] + data_dictionary[user_id][UNKNOWN]
+            )
+            data_dictionary[user_id][MSA_OVERALL_SD] = calculate_msa_sd(
+                data_dictionary[user_id][KNOWN] + data_dictionary[user_id][UNKNOWN]
+            )
+
+        return data_dictionary
+
+    return calculate_metadata(data)
 
 
 def calculate_dispersion(points):
@@ -177,6 +263,10 @@ def plot_sample(sample):
     plt.show()
 
 
+def write_output_csv(output_csv_filaname, data_dictionary):
+    pass
+
+
 def main():
     parser = ArgumentParser(
         description="Fixation detection script"
@@ -189,11 +279,18 @@ def main():
         default="train.csv.zip"
     )
     parser.add_argument(
-        "--filename",
+        "--input-filename",
         help="Filename inside the ZIP archive",
         type=str,
-        dest="file_name",
+        dest="input_filename",
         default="train.csv"
+    )
+    parser.add_argument(
+        "--output-filename",
+        help="Filename for the CSV file",
+        type=str,
+        dest="output_filename",
+        default="group8_fixations.csv"
     )
     parser.add_argument(
         "--target-users",
@@ -221,14 +318,32 @@ def main():
 
     samples = get_filtered_data_as_dict(
         archive_name=args.archive_name,
-        file_name=args.file_name,
+        file_name=args.input_filename,
         target_users=args.target_users,
         dispersion_threshold=args.dispersion_threshold,
         duration_threshold=args.duration_threshold
     )
 
+    # Display data
     for user_id in samples:
         print(f"\nUser {user_id}")
+        print(f"MFD_TRUE: {samples[user_id][MFD_TRUE]}")
+        print(f"MFD_SD_TRUE: {samples[user_id][MFD_SD_TRUE]}")
+
+        print(f"MFD_FALSE: {samples[user_id][MFD_FALSE]}")
+        print(f"MFD_SD_FALSE: {samples[user_id][MFD_SD_FALSE]}")
+
+        print(f"MFD_OVERALL: {samples[user_id][MFD_OVERALL]}")
+        print(f"MFD_OVERALL_SD: {samples[user_id][MFD_OVERALL_SD]}")
+
+        print(f"MSA_TRUE: {samples[user_id][MSA_TRUE]}")
+        print(f"MSA_SD_TRUE: {samples[user_id][MSA_SD_TRUE]}")
+
+        print(f"MSA_FALSE: {samples[user_id][MSA_FALSE]}")
+        print(f"MSA_SD_FALSE: {samples[user_id][MSA_SD_FALSE]}")
+
+        print(f"MSA_OVERALL: {samples[user_id][MSA_OVERALL]}")
+        print(f"MSA_OVERALL_SD: {samples[user_id][MSA_OVERALL_SD]}")
 
         recognized_samples = len(samples[user_id][KNOWN])
         unrecognized_samples = len(samples[user_id][UNKNOWN])
