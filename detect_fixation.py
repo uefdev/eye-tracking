@@ -109,11 +109,12 @@ def calculate_metadata(data_dictionary):
     return data_dictionary
 
 
-def get_filtered_data_as_dict(archive_name, file_name, target_users, dispersion_threshold, duration_threshold):
+def get_filtered_data_as_dict(archive_name, file_name, target_users, dispersion_threshold_x, dispersion_threshold_y, duration_threshold):
     def data_reducer(acc, cur):
         cur_fixation_points = detect_fixation(
             original_points=cur[2],
-            dispersion_threshold=dispersion_threshold,
+            dispersion_threshold_x=dispersion_threshold_x,
+            dispersion_threshold_y=dispersion_threshold_y,
             duration_threshold=duration_threshold
         )
         cur_saccade_amplitudes = calculate_saccade_amplitudes(
@@ -171,11 +172,11 @@ def calculate_dispersion(points):
     y_max = max(points, key=lambda pair: pair[1])[1]
     x_min = min(points, key=lambda pair: pair[0])[0]
     y_min = min(points, key=lambda pair: pair[1])[1]
-    return (x_max - x_min) + (y_max - y_min)
+    return (x_max - x_min), (y_max - y_min)
 
 
 # Identification by dispersion threshold
-def detect_fixation(original_points, dispersion_threshold=80, duration_threshold=100):
+def detect_fixation(original_points, dispersion_threshold_x=97, dispersion_threshold_y=56, duration_threshold=100):
     points = original_points.copy()
     fixation_points = []
     removed = 0
@@ -193,8 +194,8 @@ def detect_fixation(original_points, dispersion_threshold=80, duration_threshold
                 # return fixation_points
 
         # If dispersion of window points <= threshold
-        dispersion = calculate_dispersion(window)
-        if dispersion <= dispersion_threshold:
+        dispersion_x, dispersion_y = calculate_dispersion(window)
+        if dispersion_x <= dispersion_threshold_x and dispersion_y <= dispersion_threshold_y:
 
             # Add additional points to the window until dispersion > threshold
             i = 0
@@ -204,8 +205,8 @@ def detect_fixation(original_points, dispersion_threshold=80, duration_threshold
                     i += 1
                 except IndexError:
                     break
-                dispersion = calculate_dispersion(window)
-                if dispersion > dispersion_threshold:
+                dispersion_x, dispersion_y = calculate_dispersion(window)
+                if dispersion_x > dispersion_threshold_x or dispersion_y > dispersion_threshold_y:
                     window.pop()
                     break
 
@@ -337,11 +338,18 @@ def main():
         default=DEFAULT_TARGET_USERS
     )
     parser.add_argument(
-        "--dispersion-threshold",
-        help="Dispersion threshold",
+        "--dispersion-threshold-x",
+        help="Dispersion threshold x-axis",
         type=int,
-        dest="dispersion_threshold",
-        default=80
+        dest="dispersion_threshold_x",
+        default=97
+    )
+    parser.add_argument(
+        "--dispersion-threshold-y",
+        help="Dispersion threshold y-axis",
+        type=int,
+        dest="dispersion_threshold_y",
+        default=56
     )
     parser.add_argument(
         "--duration-threshold",
@@ -362,7 +370,8 @@ def main():
         archive_name=args.archive_name,
         file_name=args.input_filename,
         target_users=args.target_users,
-        dispersion_threshold=args.dispersion_threshold,
+        dispersion_threshold_x=args.dispersion_threshold_x,
+        dispersion_threshold_y=args.dispersion_threshold_y,
         duration_threshold=args.duration_threshold
     )
 
