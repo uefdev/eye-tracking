@@ -6,6 +6,7 @@ import numpy as np
 from argparse import ArgumentParser
 from math import sqrt
 from functools import reduce
+from matplotlib import pyplot as plt
 
 
 def read_csv(csv_filename):
@@ -44,15 +45,39 @@ def main():
 
     labels, user_ids, data = read_csv(args.input_filename)
 
-    values_for_plotting = np.array(list(map(
-        lambda pair: (
-            pair[0],
-            get_std_of_stds(pair[1]) if choose_operation_by_label(pair[0]) else np.mean(pair[1])
-        ),
-        zip(labels, data.T)
-    )))
+    vals = dict(
+        (key, value) for key, value in
+        map(
+            lambda pair: (
+                pair[0],
+                get_std_of_stds(pair[1]) if choose_operation_by_label(pair[0]) else np.mean(pair[1])
+            ),
+            zip(labels, data.T)
+        )
+    )
 
-    print(values_for_plotting)
+    mfd_mean = (vals["MFD_true"], vals["MFD_false"], vals["MFD_overall"])
+    mfd_sd = (vals["MFD_SD_true"], vals["MFD_SD_false"], vals["MFD_overall_SD"])
+
+    msa_mean = (vals["MSA_true"], vals["MSA_false"], vals["MSA_overall"])
+    msa_sd = (vals["MSA_SD_true"], vals["MSA_SD_false"], vals["MSA_overall_SD"])
+
+    ind = np.array(range(3))
+
+    labels = ["known", "unknown", "overall"]
+    colors = ["tab:green", "tab:red", "tab:blue"]
+
+    ax = plt.subplot(1, 2, 1)
+    ax.bar(ind, mfd_mean, 0.8, yerr=mfd_sd, tick_label=labels, color=colors)
+    ax.title.set_text("Mean Fixation Duration (ms)")
+
+    ax = plt.subplot(1, 2, 2)
+    ax.bar(ind, msa_mean, 0.8, yerr=msa_sd, tick_label=labels, color=colors)
+    ax.title.set_text("Mean Saccade Amplitude")
+
+    plt.show()
+
+    print(vals)
 
 
 if __name__ == "__main__":
