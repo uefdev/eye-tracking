@@ -36,7 +36,7 @@ Return list of fixations
 KNOWN = "known"
 UNKNOWN = "unknown"
 
-MFD_TRUE = "MFD_true",
+MFD_TRUE = "MFD_true"
 MFD_SD_TRUE = "MFD_SD_true"
 
 MFD_FALSE = "MFD_false"
@@ -60,11 +60,11 @@ def zip_coords(coordinate_vector):
 
 
 def calculate_mfd(structs):
-    return np.mean((list(map(lambda struct: struct[0], reduce(lambda acc, cur: acc + cur[1], structs, [])))))
+    return np.mean(list(map(lambda struct: struct[0], reduce(lambda acc, cur: acc + cur[1], structs, []))))
 
 
 def calculate_mfd_sd(structs):
-    return np.std((list(map(lambda struct: struct[0], reduce(lambda acc, cur: acc + cur[1], structs, [])))))
+    return np.std(list(map(lambda struct: struct[0], reduce(lambda acc, cur: acc + cur[1], structs, []))))
 
 
 def calculate_msa(structs):
@@ -263,8 +263,48 @@ def plot_sample(sample):
     plt.show()
 
 
-def write_output_csv(output_csv_filaname, data_dictionary):
-    pass
+def write_output_csv(output_csv_filename, data_dictionary):
+    with open(output_csv_filename, "w") as csv_file:
+        file_writer = csv.writer(
+            csv_file,
+            delimiter=","
+        )
+        file_writer.writerow([
+            "subject_id",
+            MFD_TRUE,
+            MFD_SD_TRUE,
+            MFD_FALSE,
+            MFD_SD_FALSE,
+            MSA_TRUE,
+            MSA_SD_TRUE,
+            MSA_FALSE,
+            MSA_SD_FALSE,
+            MFD_OVERALL,
+            MFD_OVERALL_SD,
+            MSA_OVERALL,
+            MSA_OVERALL_SD
+        ])
+        for user_id in data_dictionary:
+            file_writer.writerow([
+                user_id,
+                data_dictionary[user_id][MFD_TRUE],
+                data_dictionary[user_id][MFD_SD_TRUE],
+                data_dictionary[user_id][MFD_FALSE],
+                data_dictionary[user_id][MFD_SD_FALSE],
+                data_dictionary[user_id][MSA_TRUE],
+                data_dictionary[user_id][MSA_SD_TRUE],
+                data_dictionary[user_id][MSA_FALSE],
+                data_dictionary[user_id][MSA_SD_FALSE],
+                data_dictionary[user_id][MFD_OVERALL],
+                data_dictionary[user_id][MFD_OVERALL_SD],
+                data_dictionary[user_id][MSA_OVERALL],
+                data_dictionary[user_id][MSA_OVERALL_SD]
+            ])
+        csv_file.close()
+
+
+# subject_id MFD_true MFD_SD_true MFD_false MFD_SD_false MSA_true MSA_SD_true MSA_false MSA_SD_false
+# MFD_overall MFD_overall_SD MSA_overall MSA_overall_SD
 
 
 def main():
@@ -314,6 +354,12 @@ def main():
         dest="duration_threshold",
         default=100
     )
+    parser.add_argument(
+        "--show-plots",
+        help="Show plots",
+        action="store_true",
+        dest="show_plots",
+    )
     args = parser.parse_args()
 
     samples = get_filtered_data_as_dict(
@@ -323,6 +369,8 @@ def main():
         dispersion_threshold=args.dispersion_threshold,
         duration_threshold=args.duration_threshold
     )
+
+    write_output_csv(args.output_filename, samples)
 
     # Display data
     for user_id in samples:
@@ -349,13 +397,14 @@ def main():
         unrecognized_samples = len(samples[user_id][UNKNOWN])
         print(f"{recognized_samples} recognized images and {unrecognized_samples} unrecognized images")
 
-        for index, sample in enumerate(samples[user_id][KNOWN]):
-            print(f"Recognized sample {index + 1}/{recognized_samples}")
-            plot_sample(sample)
+        if args.show_plots:
+            for index, sample in enumerate(samples[user_id][KNOWN]):
+                print(f"Recognized sample {index + 1}/{recognized_samples}")
+                plot_sample(sample)
 
-        for index, sample in enumerate(samples[user_id][UNKNOWN]):
-            print(f"Unrecognized sample {index + 1}/{unrecognized_samples}")
-            plot_sample(sample)
+            for index, sample in enumerate(samples[user_id][UNKNOWN]):
+                print(f"Unrecognized sample {index + 1}/{unrecognized_samples}")
+                plot_sample(sample)
 
 
 if __name__ == "__main__":
